@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "microtonal-score-converter"
+version = "0.1.0"
+description = "Convert SymbTr-txt, the gold 53-TET representation of Ottoman-Turkish makam music, into other symbolic formats -- and measure what each one loses."
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{ name = "lab-microtonal, The Sound of AI" }]
+keywords = ["makam", "microtonal", "53-TET", "SymbTr", "MIR", "symbolic music"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = []
+
+[project.urls]
+"SymbTr corpus" = "https://github.com/MTG/SymbTr"
+
+[project.scripts]
+microtonal-score-converter = "microtonal_score_converter.cli:main"
+
+# Dev tooling lives in a PEP 735 dependency group, which `uv sync` installs by
+# default and which is never published with the package.  The `dev` extra
+# mirrors it so `pip install -e ".[dev]"` still works for anyone not on uv.
+[dependency-groups]
+dev = ["pytest>=7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.uv]
+# The package itself is the thing under test, so always install it into the
+# environment rather than treating it as a bare dependency source.
+package = true
+
+[tool.setuptools.packages.find]
+include = ["microtonal_score_converter*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Corpus-backed tests skip themselves when SymbTr is not checked out alongside;
+# make that visible rather than silent, so a green run is not mistaken for a
+# full one.
+addopts = "-ra"
