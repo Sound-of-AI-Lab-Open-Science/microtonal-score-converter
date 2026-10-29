@@ -80,8 +80,9 @@ the seven writers (`write_midi`, `write_musicxml`, `write_abc`, `write_kern`,
 and MuseScore helpers (`retune_file`, `retune_mscx`, `tuning_cents`).
 
 Full walkthrough of the IR, writer options, and round-trips:
-**[docs/library.md](docs/library.md)**. Generated API reference (MkDocs):
-see [docs/](docs/) and `uv run --group docs mkdocs serve`.
+**[docs/library.md](docs/library.md)**. Published docs (MkDocs on GitHub Pages):
+https://sound-of-ai-lab-open-science.github.io/microtonal-score-converter/
+(`uv run --group docs mkdocs serve` for a local preview).
 
 ---
 

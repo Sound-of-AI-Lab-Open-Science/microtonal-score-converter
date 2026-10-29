@@ -1,6 +1,8 @@
 site_name: microtonal-score-converter
 site_description: Convert SymbTr-txt (53-TET makam scores) and measure what each format loses
-repo_url: https://github.com/MTG/SymbTr
+site_url: https://sound-of-ai-lab-open-science.github.io/microtonal-score-converter/
+repo_url: https://github.com/Sound-of-AI-Lab-Open-Science/microtonal-score-converter
+repo_name: Sound-of-AI-Lab-Open-Science/microtonal-score-converter
 
 theme:
   name: material

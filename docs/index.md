@@ -18,7 +18,10 @@ print(write_abc(score, mode="53tet"))
 print(format_report(audit_score(score)))
 ```
 
+Published at
+https://sound-of-ai-lab-open-science.github.io/microtonal-score-converter/
+
 ```bash
 uv sync --group docs
-uv run --group docs mkdocs serve
+uv run --group docs mkdocs serve   # local preview
 ```

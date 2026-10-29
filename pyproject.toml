@@ -22,6 +22,8 @@ classifiers = [
 dependencies = []
 
 [project.urls]
+Homepage = "https://github.com/Sound-of-AI-Lab-Open-Science/microtonal-score-converter"
+Documentation = "https://sound-of-ai-lab-open-science.github.io/microtonal-score-converter/"
 "SymbTr corpus" = "https://github.com/MTG/SymbTr"
 
 [project.scripts]
