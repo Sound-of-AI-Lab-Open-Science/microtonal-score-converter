@@ -26,7 +26,7 @@ Plain pip also works:
 pip install -e ".[dev]"
 ```
 
-## Use
+## CLI
 
 ```bash
 uv run microtonal-score-converter convert SymbTr/txt/*.txt --to midi,musicxml,abc,kern -o out/
@@ -52,13 +52,32 @@ uv run microtonal-score-converter convert score.txt --to musicxml --precision 12
 uv run microtonal-score-converter retune score.txt score.mscz
 ```
 
+## Library usage
+
+Zero runtime dependencies. Import from the top-level package:
+
 ```python
-from microtonal_score_converter import read_txt, write_abc, audit_score, format_report
+from microtonal_score_converter import (
+    read_txt, write_midi, write_musicxml, write_abc,
+    audit_score, format_report,
+)
 
 score = read_txt("beyati--sarki--aksak--karsidan_yar--dede_efendi.txt")
-print(write_abc(score, mode="53tet"))
-print(format_report(audit_score(score)))
+print(score.summary())
+# beyati--sarki--aksak--karsidan_yar--dede_efendi: 387 notes, 63 measures, ...
+
+# Writers return bytes (MIDI) or str; pass path= to write a file as well.
+mid = write_midi(score, path="out.mid")                 # convention="symbtr"
+xml = write_musicxml(score, precision="exact")          # lossless alter
+abc = write_abc(score, mode="53tet")                    # ^n/53 accidentals
+
+print(format_report(audit_score(score)))                # loss matrix
 ```
+
+Public surface (`__all__`): `read_txt`, `Score` / `Event` / `Metadata` / `Pitch`,
+the seven writers (`write_midi`, `write_musicxml`, `write_abc`, `write_kern`,
+`write_tokens`, `write_json`, `write_txt`), `audit_score` / `format_report`,
+and MuseScore helpers (`retune_file`, `retune_mscx`, `tuning_cents`).
 
 ---
 
