@@ -79,6 +79,9 @@ the seven writers (`write_midi`, `write_musicxml`, `write_abc`, `write_kern`,
 `write_tokens`, `write_json`, `write_txt`), `audit_score` / `format_report`,
 and MuseScore helpers (`retune_file`, `retune_mscx`, `tuning_cents`).
 
+Full walkthrough of the IR, writer options, and round-trips:
+**[docs/library.md](docs/library.md)**.
+
 ---
 
 ## Why this exists
@@ -407,6 +410,7 @@ microtonal_score_converter/
   cli.py         convert / audit / audit-published / info
   readers/       txt (gold), mu2 (metadata), filename, midi, musicxml, abc
   writers/       txt, midi, musicxml, abc, kern, tokens, jsonio
+docs/            library guide
 tests/           130 tests; corpus tests skip when SymbTr is not present
 pyproject.toml   package metadata; dev deps in a PEP 735 dependency group
 uv.lock          committed, so `uv sync` is reproducible
