@@ -30,10 +30,17 @@ pip install -e ".[dev]"
 
 ```bash
 uv run microtonal-score-converter convert SymbTr/txt/*.txt --to midi,musicxml,abc,kern -o out/
+uv run microtonal-score-converter convert out/score.mid --from midi --to abc,musicxml -o out2/
 uv run microtonal-score-converter audit   SymbTr/txt/beyati--sarki--aksak--karsidan_yar--dede_efendi.txt
+uv run microtonal-score-converter audit   SymbTr/txt/beyati--sarki--aksak--karsidan_yar--dede_efendi.txt --paths
 uv run microtonal-score-converter audit-published --root SymbTr/
 uv run microtonal-score-converter info    SymbTr/txt/rast--sarki--duyek--omrumce_hep--irfan_ozbakir.txt
 ```
+
+`--from` accepts `txt`, `json`, `midi`, `musicxml`, or `abc` (auto-detected from
+the suffix when omitted). Non-txt inputs rebuild a **slim** Score (53-TET pitch
++ duration); they are meant for files this package wrote, not arbitrary MIDI/ABC.
+`audit --paths` prints the pairwise gold→A→B loss matrix.
 
 ### Opening a score in MuseScore
 
@@ -59,25 +66,30 @@ Zero runtime dependencies. Import from the top-level package:
 ```python
 from microtonal_score_converter import (
     read_txt, write_midi, write_musicxml, write_abc,
-    audit_score, format_report,
+    score_from_midi, audit_score, format_report,
+    audit_paths, format_path_report,
 )
 
 score = read_txt("beyati--sarki--aksak--karsidan_yar--dede_efendi.txt")
 print(score.summary())
 # beyati--sarki--aksak--karsidan_yar--dede_efendi: 387 notes, 63 measures, ...
 
-# Writers return bytes (MIDI) or str; pass path= to write a file as well.
+# Writers return bytes (MIDI) or str; pass path= to also write a file.
 mid = write_midi(score, path="out.mid")                 # convention="symbtr"
 xml = write_musicxml(score, precision="exact")          # lossless alter
 abc = write_abc(score, mode="53tet")                    # ^n/53 accidentals
 
-print(format_report(audit_score(score)))                # loss matrix
+# Back from our microtonal MIDI (pitch intact; slim IR):
+slim = score_from_midi(mid)
+print(write_abc(slim, mode="53tet"))
+
+print(format_report(audit_score(score)))                # single-hop loss
+print(format_path_report(audit_paths(score)))           # pairwise A → B
 ```
 
-Public surface (`__all__`): `read_txt`, `Score` / `Event` / `Metadata` / `Pitch`,
-the seven writers (`write_midi`, `write_musicxml`, `write_abc`, `write_kern`,
-`write_tokens`, `write_json`, `write_txt`), `audit_score` / `format_report`,
-and MuseScore helpers (`retune_file`, `retune_mscx`, `tuning_cents`).
+Public surface (`__all__`): `read_txt`, `score_from_*` / `load_score`,
+`Score` / `Event` / `Metadata` / `Pitch`, the seven writers, `audit_score` /
+`format_report`, `audit_paths` / `format_path_report`, and MuseScore helpers.
 
 Full walkthrough of the IR, writer options, and round-trips:
 **[docs/library.md](docs/library.md)**. Published docs (MkDocs on GitHub Pages):

@@ -23,33 +23,55 @@ public list is `__all__` in `microtonal_score_converter/__init__.py`.
 ## Pipeline
 
 ```
-SymbTr-txt ──read_txt──► Score (IR) ──write_*──► midi / musicxml / abc / …
+SymbTr-txt ──read_txt──► Score (full IR) ──write_*──► midi / musicxml / abc / …
                               │
-                              └──audit_score──► loss matrix
+                              ├──audit_score──► single-hop loss matrix
+                              └──audit_paths──► pairwise A → B loss vs gold
+
+midi / abc / musicxml / json ──score_from_*──► Score (slim) ──write_*──► …
 ```
 
 Writers never mutate the `Score`. Most return a `str` (or `bytes` for MIDI);
 pass `path=` to also write a file.
+
+**Gold vs slim.** SymbTr-txt (and JSON) rebuild the full IR. MIDI / MusicXML /
+ABC importers rebuild a *slim* Score: 53-TET pitch + duration only. They do
+**not** restore AE spelling, `Kod`, lyrics, `Ms`, or structure. They assume
+files written by *this* package (or SymbTr’s own MIDI convention) — not
+arbitrary MIDI/ABC.
+
+Lossless pitch paths (expected ~0¢ vs gold): `txt`, `json`, `midi/symbtr`,
+`musicxml/exact`, `abc/53tet`.
 
 ---
 
 ## Reading
 
 ```python
-from microtonal_score_converter import read_txt, parse_symbtr_name
+from microtonal_score_converter import (
+    read_txt, parse_symbtr_name,
+    score_from_midi, score_from_abc, score_from_musicxml,
+    score_from_json, load_score,
+)
 
 score = read_txt("path/to/score.txt")                 # loads sibling .mu2 if found
 score = read_txt("path/to/score.txt", use_mu2=False)  # txt only
 score = read_txt("score.txt", mu2_path="other.mu2")   # explicit metadata
+
+# Slim imports from this package's own microtonal outputs:
+score = score_from_midi("out.mid")                    # symbtr A-anchor by default
+score = score_from_abc(open("out.abc").read())
+score = score_from_musicxml("out.xml")
+score = load_score("out.mid")                         # suffix auto-detect
 ```
 
 `parse_symbtr_name(path_or_name)` splits a SymbTr filename into
 `makam` / `form` / `usul` / `title` / `composer` (and optional `variant`).
 
-Round-trip *verification* readers for written output live under
-`microtonal_score_converter.readers` (`read_midi`, `read_musicxml`, `read_abc`)
-and are not re-exported at the package root — they return lightweight note
-lists for audit, not a full `Score`.
+Low-level audit readers under `microtonal_score_converter.readers`
+(`read_midi`, `read_musicxml`, `read_abc`) still return note lists for
+measurement; prefer `score_from_*` when you need a `Score` for further
+conversion.
 
 ---
 
@@ -194,19 +216,34 @@ Reload with `microtonal_score_converter.writers.jsonio.read_json` /
 ## Audit
 
 ```python
-from microtonal_score_converter import audit_score, format_report
+from microtonal_score_converter import (
+    audit_score, format_report, audit_paths, format_path_report,
+)
 
 reports = audit_score(score)          # write → read → compare per config
 print(format_report(reports))
 for r in reports:
-    if r.format == "abc" and r.variant == "53tet":
-        print(r.pitch_ok, r.mean_cents, r.lost)
+    if r.fmt == "abc" and r.variant == "53tet":
+        print(r.pitch_exact_fraction, r.pitch_cents_mean)
+
+# Pairwise: gold → write A → slim Score → write B, compare B to gold notes
+paths = audit_paths(score)
+print(format_path_report(paths))
+```
+
+CLI:
+
+```bash
+uv run microtonal-score-converter audit score.txt
+uv run microtonal-score-converter audit score.txt --paths
+uv run microtonal-score-converter convert score.mid --from midi --to abc -o out/
 ```
 
 Pitch/duration columns are **measured** (round-trip). Humdrum rows are
 **declared** (no reader) and marked `(declared)` in the table. Attribute
 retention is probed in the rendered text — formats are not credited for
-content that was not found.
+content that was not found. `audit_paths` measures note pitch against gold
+even when an intermediate drops rests (so MIDI paths stay aligned).
 
 ---
 

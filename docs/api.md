@@ -11,6 +11,12 @@ and parameter detail.
       members:
         - read_txt
         - parse_symbtr_name
+        - score_from_txt
+        - score_from_json
+        - score_from_midi
+        - score_from_musicxml
+        - score_from_abc
+        - load_score
         - Pitch
         - Score
         - Event
@@ -26,11 +32,31 @@ and parameter detail.
         - write_tokens
         - audit_score
         - format_report
+        - audit_paths
+        - format_path_report
         - retune_file
         - retune_mscx
         - tuning_cents
       show_root_heading: false
       show_source: true
+
+## Importers (slim Score)
+
+::: microtonal_score_converter.importers
+    options:
+      members:
+        - score_from_txt
+        - score_from_json
+        - score_from_midi
+        - score_from_musicxml
+        - score_from_abc
+        - load_score
+        - detect_format
+        - cents_to_koma
+        - pitch_from_cents
+        - IMPORTABLE
+        - SUFFIX_FORMATS
+      show_source: false
 
 ## Pitch model
 
@@ -166,6 +192,9 @@ and parameter detail.
         - audit_score
         - format_report
         - FormatReport
+        - audit_paths
+        - format_path_report
+        - PathReport
         - audit_published_midi
         - audit_published_musicxml
         - TOLERANCE_CENTS
