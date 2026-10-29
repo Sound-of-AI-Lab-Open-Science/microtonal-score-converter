@@ -80,7 +80,8 @@ the seven writers (`write_midi`, `write_musicxml`, `write_abc`, `write_kern`,
 and MuseScore helpers (`retune_file`, `retune_mscx`, `tuning_cents`).
 
 Full walkthrough of the IR, writer options, and round-trips:
-**[docs/library.md](docs/library.md)**.
+**[docs/library.md](docs/library.md)**. Generated API reference (MkDocs):
+see [docs/](docs/) and `uv run --group docs mkdocs serve`.
 
 ---
 
@@ -410,7 +411,7 @@ microtonal_score_converter/
   cli.py         convert / audit / audit-published / info
   readers/       txt (gold), mu2 (metadata), filename, midi, musicxml, abc
   writers/       txt, midi, musicxml, abc, kern, tokens, jsonio
-docs/            library guide
+docs/            library guide + MkDocs API reference
 tests/           130 tests; corpus tests skip when SymbTr is not present
 pyproject.toml   package metadata; dev deps in a PEP 735 dependency group
 uv.lock          committed, so `uv sync` is reproducible
@@ -422,6 +423,8 @@ uv.lock          committed, so `uv sync` is reproducible
 ```bash
 uv sync                      # .venv with the package installed editable
 uv run pytest                # 130 tests, ~2 s
+uv sync --group docs         # MkDocs + mkdocstrings
+uv run --group docs mkdocs serve   # http://127.0.0.1:8000
 ```
 
 The `requires-python = ">=3.8"` claim is not a guess — uv makes checking it one
