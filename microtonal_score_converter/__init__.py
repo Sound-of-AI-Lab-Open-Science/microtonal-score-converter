@@ -15,8 +15,10 @@ attribute, exactly what survived.
 
 __version__ = "0.1.0"
 
-from .audit import audit_score, format_report
+from .audit import audit_paths, audit_score, format_path_report, format_report
 from .duration import notate
+from .importers import (load_score, score_from_abc, score_from_json,
+                        score_from_midi, score_from_musicxml, score_from_txt)
 from .musescore import retune_file, retune_mscx, tuning_cents
 from .pitch import Pitch, quantize
 from .readers.filename import parse_symbtr_name
@@ -30,8 +32,10 @@ __all__ = [
     "__version__",
     "Event", "Metadata", "Pitch", "Score",
     "read_txt", "parse_symbtr_name", "notate", "quantize",
+    "score_from_txt", "score_from_json", "score_from_midi",
+    "score_from_musicxml", "score_from_abc", "load_score",
     "write_abc", "write_json", "write_kern", "write_midi", "write_musicxml",
     "write_tokens", "write_txt",
-    "audit_score", "format_report",
+    "audit_score", "format_report", "audit_paths", "format_path_report",
     "retune_file", "retune_mscx", "tuning_cents",
 ]

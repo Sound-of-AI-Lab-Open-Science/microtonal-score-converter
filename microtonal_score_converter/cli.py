@@ -3,7 +3,9 @@
 ::
 
     microtonal-score-converter convert SCORE... --to midi,abc -o out/
+    microtonal-score-converter convert score.mid --from midi --to abc -o out/
     microtonal-score-converter audit SCORE...
+    microtonal-score-converter audit SCORE... --paths
     microtonal-score-converter audit-published --root path/to/SymbTr
     microtonal-score-converter info SCORE
 """
@@ -18,11 +20,10 @@ import sys
 from typing import Dict, Iterable, List, Optional, Sequence
 
 from . import __version__
-from .audit import (audit_published_midi, audit_published_musicxml,
-                    audit_score, format_report)
+from .audit import (audit_paths, audit_published_midi, audit_published_musicxml,
+                    audit_score, format_path_report, format_report)
+from .importers import IMPORTABLE, detect_format, load_score
 from .musescore import RetuneError, retune_file
-from .readers.mu2 import find_sibling_mu2
-from .readers.txt import read_txt
 from .score import Score
 from .writers import (write_abc, write_json, write_kern, write_midi,
                       write_musicxml, write_tokens)
@@ -70,7 +71,12 @@ def _build_parser() -> argparse.ArgumentParser:
     convert = subparsers.add_parser(
         "convert", help="convert scores to one or more target formats")
     convert.add_argument("inputs", nargs="+",
-                         help="SymbTr-txt files, directories or globs")
+                         help="score files, directories or globs "
+                              "(SymbTr-txt, or midi/abc/musicxml/json)")
+    convert.add_argument("--from", dest="source_format", default=None,
+                         choices=sorted(IMPORTABLE),
+                         help="input format (default: detect from suffix; "
+                              "txt if ambiguous)")
     convert.add_argument("--to", default="musicxml",
                          help="comma-separated targets: "
                               + ", ".join(sorted(TARGETS)))
@@ -101,6 +107,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "audit", help="round-trip scores through every format and report loss")
     audit.add_argument("inputs", nargs="+")
     audit.add_argument("--no-mu2", action="store_true")
+    audit.add_argument("--paths", action="store_true",
+                       help="pairwise matrix: gold → A → B loss for every "
+                            "importable format pair")
     audit.set_defaults(handler=_run_audit)
 
     published = subparsers.add_parser(
@@ -153,7 +162,7 @@ def _run_convert(args) -> int:
               f"choose from {', '.join(sorted(TARGETS))}", file=sys.stderr)
         return 2
 
-    paths = _expand(args.inputs)
+    paths = _expand(args.inputs, source_format=args.source_format)
     if not paths:
         print("no input files matched", file=sys.stderr)
         return 2
@@ -162,13 +171,15 @@ def _run_convert(args) -> int:
     failures = 0
     for path in paths:
         try:
-            score = _load(path, args.no_mu2)
+            score = _load(path, args.no_mu2, source_format=args.source_format)
         except Exception as exc:  # noqa: BLE001 - keep going through a batch
             print(f"{path}: {exc}", file=sys.stderr)
             failures += 1
             continue
 
         stem = os.path.splitext(os.path.basename(path))[0]
+        if stem.endswith(".symbtr"):
+            stem = stem[:-7]
         for target in targets:
             writer, extension, _ = TARGETS[target]
             destination = os.path.join(args.output, stem + extension)
@@ -192,7 +203,10 @@ def _run_audit(args) -> int:
         score = _load(path, args.no_mu2)
         print(f"== {score.metadata.name} "
               f"({len(score.notes)} notes, {len(score.measures())} measures)")
-        print(format_report(audit_score(score)))
+        if args.paths:
+            print(format_path_report(audit_paths(score)))
+        else:
+            print(format_report(audit_score(score)))
         print()
     return 0
 
@@ -289,12 +303,23 @@ def _range(score: Score) -> str:
 # -- helpers ----------------------------------------------------------------
 
 
-def _expand(inputs: Iterable[str]) -> List[str]:
+_DIR_GLOBS = {
+    "txt": "*.txt",
+    "json": "*.json",
+    "midi": "*.mid",
+    "musicxml": "*.xml",
+    "abc": "*.abc",
+}
+
+
+def _expand(inputs: Iterable[str],
+            source_format: Optional[str] = None) -> List[str]:
     """Accept files, directories and globs, in any mixture."""
     out: List[str] = []
     for item in inputs:
         if os.path.isdir(item):
-            out.extend(sorted(glob.glob(os.path.join(item, "*.txt"))))
+            pattern = _DIR_GLOBS.get(source_format or "txt", "*.txt")
+            out.extend(sorted(glob.glob(os.path.join(item, pattern))))
         elif any(ch in item for ch in "*?["):
             out.extend(sorted(glob.glob(item)))
         elif os.path.exists(item):
@@ -304,9 +329,10 @@ def _expand(inputs: Iterable[str]) -> List[str]:
     return out
 
 
-def _load(path: str, no_mu2: bool) -> Score:
-    mu2 = None if no_mu2 else find_sibling_mu2(path)
-    return read_txt(path, mu2_path=mu2, use_mu2=not no_mu2)
+def _load(path: str, no_mu2: bool,
+          source_format: Optional[str] = None) -> Score:
+    fmt = source_format or detect_format(path) or "txt"
+    return load_score(path, fmt, no_mu2=no_mu2)
 
 
 if __name__ == "__main__":  # pragma: no cover
