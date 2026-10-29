@@ -466,6 +466,218 @@ def format_report(reports: Sequence[FormatReport], *, width: int = 100) -> str:
     return "\n".join(lines)
 
 
+# -- pairwise path audit (gold → A → B → compare to gold) -------------------
+
+
+#: Formats that :mod:`microtonal_score_converter.importers` can rebuild as a Score.
+_PATH_FORMATS = frozenset({"txt", "json", "midi", "musicxml", "abc"})
+
+
+@dataclass
+class PathReport:
+    """Loss of the path gold → write A → slim Score → write B, vs gold pitch."""
+
+    src_fmt: str
+    src_variant: str
+    dst_fmt: str
+    dst_variant: str
+    notes_compared: int = 0
+    pitch_exact: int = 0
+    pitch_cents_mean: float = 0.0
+    pitch_cents_max: float = 0.0
+    duration_exact: int = 0
+    durations_compared: int = 0
+    note: str = ""
+
+    @property
+    def pitch_exact_fraction(self) -> float:
+        return self.pitch_exact / self.notes_compared if self.notes_compared else 0.0
+
+    @property
+    def duration_exact_fraction(self) -> float:
+        return (self.duration_exact / self.durations_compared
+                if self.durations_compared else 0.0)
+
+    @property
+    def label(self) -> str:
+        return (f"{self.src_fmt}/{self.src_variant}"
+                f" -> {self.dst_fmt}/{self.dst_variant}")
+
+
+def _path_configurations() -> List[Tuple[str, str, Callable[[Score], object]]]:
+    """Configs that both render and re-import as a Score."""
+    return [c for c in _configurations() if c[0] in _PATH_FORMATS]
+
+
+def _import_rendered(fmt: str, rendered) -> Score:
+    """Rebuild a slim (or full) Score from a just-rendered blob."""
+    import json
+    import os
+    import tempfile
+
+    from .importers import (score_from_abc, score_from_json, score_from_midi,
+                            score_from_musicxml)
+
+    if fmt == "txt":
+        handle, path = tempfile.mkstemp(suffix=".txt")
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8", newline="") as out:
+                out.write(rendered)
+            from .readers.txt import read_txt
+            return read_txt(path, use_mu2=False)
+        finally:
+            os.unlink(path)
+    if fmt == "json":
+        return score_from_json(rendered if isinstance(rendered, str)
+                               else rendered.decode("utf-8"))
+    if fmt == "midi":
+        return score_from_midi(rendered)
+    if fmt == "musicxml":
+        return score_from_musicxml(rendered)
+    if fmt == "abc":
+        return score_from_abc(rendered)
+    raise ValueError(f"no importer for format {fmt!r}")
+
+
+def _recovered_note_cents(fmt: str, variant: str, rendered
+                          ) -> List[Optional[float]]:
+    """Sounding pitch of each pitched note in ``rendered``, in cents above C-1.
+
+    Notes only (no rests), so paths that drop rests still align with gold
+    ``score.notes``.  MIDI values have the SymbTr A-anchor offset removed for
+    relative comparison by the caller when needed; here we return absolute
+    cents after undoing the default A4 anchor (matching ``score_from_midi``).
+    """
+    from .importers import _midi_anchor_offset
+
+    if fmt == "txt":
+        restored = _import_rendered("txt", rendered)
+        return [_gold_cents(e) for e in restored.events if e.is_note]
+    if fmt == "json":
+        restored = _import_rendered("json", rendered)
+        return [_gold_cents(e) for e in restored.events if e.is_note]
+    if fmt == "midi":
+        parsed = read_midi(rendered)
+        offset = _midi_anchor_offset(305)
+        return [n.cents + offset for n in
+                sorted(parsed.notes, key=lambda n: (n.tick, n.note))]
+    if fmt == "musicxml":
+        folded = _fold_ties(read_musicxml(rendered).notes)
+        return [head.cents for head, _ in folded
+                if not head.is_rest and head.cents is not None]
+    if fmt == "abc":
+        return [n.cents for n in read_abc(rendered).notes
+                if not n.is_rest and n.cents is not None]
+    return []
+
+
+def _recovered_note_durations(fmt: str, rendered) -> List[Fraction]:
+    """Symbolic durations (whole notes) of pitched notes in ``rendered``."""
+    if fmt == "txt":
+        restored = _import_rendered("txt", rendered)
+        return [e.duration for e in restored.events if e.is_note]
+    if fmt == "json":
+        restored = _import_rendered("json", rendered)
+        return [e.duration for e in restored.events if e.is_note]
+    if fmt == "midi":
+        # Slot = onset gap; last note uses sounding length / 0.95.
+        parsed = read_midi(rendered)
+        notes = sorted(parsed.notes, key=lambda n: (n.tick, n.note))
+        division = parsed.division or 480
+        out: List[Fraction] = []
+        for i, note in enumerate(notes):
+            if i + 1 < len(notes):
+                slot = max(notes[i + 1].tick - note.tick, 1)
+            else:
+                slot = max(int(round(note.duration / 0.95)), note.duration, 1)
+            out.append(Fraction(slot, division * 4))
+        return out
+    if fmt == "musicxml":
+        folded = _fold_ties(read_musicxml(rendered).notes)
+        return [duration for head, duration in folded if not head.is_rest]
+    if fmt == "abc":
+        return [n.duration for n in read_abc(rendered).notes if not n.is_rest]
+    return []
+
+
+def audit_paths(score: Score, *, tolerance: float = TOLERANCE_CENTS
+                ) -> List[PathReport]:
+    """Measure pitch/duration loss for every ordered pair of importable formats.
+
+    For each ``(A, B)``: write A from gold, re-import as a slim Score, write B,
+    then compare B's recovered **note** pitches and durations to the original
+    gold score.  Rests dropped by MIDI (etc.) do not shift the note alignment.
+    """
+    configs = _path_configurations()
+    imported: Dict[Tuple[str, str], Score] = {}
+    reports: List[PathReport] = []
+    gold_notes = [e for e in score.events if e.is_note]
+
+    for src_fmt, src_variant, render_src in configs:
+        key = (src_fmt, src_variant)
+        if key not in imported:
+            try:
+                imported[key] = _import_rendered(src_fmt, render_src(score))
+            except Exception as exc:  # noqa: BLE001 - record and continue
+                for dst_fmt, dst_variant, _ in configs:
+                    reports.append(PathReport(
+                        src_fmt, src_variant, dst_fmt, dst_variant,
+                        note=f"import {src_fmt}/{src_variant} failed: {exc}"))
+                continue
+
+        mid = imported[key]
+        for dst_fmt, dst_variant, render_dst in configs:
+            report = PathReport(src_fmt, src_variant, dst_fmt, dst_variant)
+            try:
+                rendered = render_dst(mid)
+            except Exception as exc:  # noqa: BLE001
+                report.note = f"write {dst_fmt}/{dst_variant} failed: {exc}"
+                reports.append(report)
+                continue
+
+            recovered = _recovered_note_cents(dst_fmt, dst_variant, rendered)
+            pairs = list(zip(gold_notes, recovered))
+            if len(recovered) != len(gold_notes):
+                report.note = (f"{len(recovered)} recovered notes for "
+                               f"{len(gold_notes)} gold notes")
+            errors = [abs(cents - _gold_cents(event))
+                      for event, cents in pairs if cents is not None]
+            _accumulate(report, errors, tolerance)
+
+            durations = _recovered_note_durations(dst_fmt, rendered)
+            dur_pairs = list(zip(gold_notes, durations))
+            report.durations_compared = len(dur_pairs)
+            report.duration_exact = sum(
+                1 for event, value in dur_pairs
+                if abs(Fraction(value) - event.duration) <= Fraction(1, 64))
+            reports.append(report)
+    return reports
+
+
+def format_path_report(reports: Sequence[PathReport], *, width: int = 110) -> str:
+    """Table of pairwise path losses (gold → A → B vs gold)."""
+    header = (f"{'src':22s} {'->':2s} {'dst':22s} {'pitch ok':>9s} "
+              f"{'mean c':>7s} {'max c':>7s} {'dur ok':>7s}")
+    lines = [header, "-" * max(width, len(header))]
+    for report in reports:
+        src = f"{report.src_fmt}/{report.src_variant}"
+        dst = f"{report.dst_fmt}/{report.dst_variant}"
+        if report.notes_compared == 0 and report.note:
+            lines.append(f"{src:22s} -> {dst:22s} {'n/a':>9s} {'n/a':>7s} "
+                         f"{'n/a':>7s} {'n/a':>7s}")
+            lines.append(f"{'':22s}    note: {report.note}")
+            continue
+        lines.append(
+            f"{src:22s} -> {dst:22s} "
+            f"{report.pitch_exact_fraction:8.1%} "
+            f"{report.pitch_cents_mean:7.2f} "
+            f"{report.pitch_cents_max:7.2f} "
+            f"{report.duration_exact_fraction:6.1%}")
+        if report.note:
+            lines.append(f"{'':22s}    note: {report.note}")
+    return "\n".join(lines)
+
+
 # -- auditing SymbTr's own published exports --------------------------------
 
 
